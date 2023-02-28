@@ -1,6 +1,6 @@
 // Entidad creada para definir el objeto Producto (una entidad se asociará directamente con una tabla de una base de datos)
 
-import { BeforeInsert, Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, Entity, PrimaryGeneratedColumn } from "typeorm";
 
 // Definimos la entidad y la estructura que tendrá la tabla Product en Postgres (BD relacional)
 @Entity()
@@ -38,7 +38,11 @@ export class Product {
     @Column('text')
     gender: string;
 
-    // método para autogenerar el Slug a partir del Title
+    // columna Tag que será un arreglo de string (por defecto será un arreglo vacío)
+    @Column('text', {array: true, default: []})
+    tags: string[]
+
+    // método para autogenerar el Slug a partir del Title al crear un Producto
     @BeforeInsert()
     checkSlugInsert() {
 
@@ -47,6 +51,13 @@ export class Product {
             
             this.slug = this.title;
         }
+
+        this.slug = this.slug.toLocaleLowerCase().replaceAll(' ', '_').replaceAll("'", '');
+    }
+
+    // método para validar el Slug al actualizar un Producto
+    @BeforeUpdate()
+    checkSlugUpdate() {
 
         this.slug = this.slug.toLocaleLowerCase().replaceAll(' ', '_').replaceAll("'", '');
     }

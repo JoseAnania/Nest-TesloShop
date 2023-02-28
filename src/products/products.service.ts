@@ -2,7 +2,9 @@
 
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { Repository } from 'typeorm';
+import { validate as isUUID } from 'uuid';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
@@ -41,18 +43,40 @@ export class ProductsService {
     }
   }
 
-  // método para obtener todos los Productos
-  findAll() {
+  // método para obtener todos los Productos (con paginación)
+  findAll(paginationDto: PaginationDto) {
 
-    // retornamos todos los productos
-    return this.productRepository.find();
+    // creamos una constante desestructurada que por defecto (si no vienen los parámetros "limit" y "offset" será de 10 y 0 respectiva//)
+    const {limit = 10, offset = 0} = paginationDto;
+
+    // retornamos todos los productos según la paginación (por defecto o no)
+    return this.productRepository.find({
+      take: limit,
+      skip: offset,
+    })
   }
 
-  // método para obtener un Producto por Id
+  // método para obtener un Producto por Id (uuid) (se puede buscar también por "slug" y "title")
   async findOne(id: string) {
 
-    // creamos una constante con la condición para encontrar el producto por id
-    const product = await this.productRepository.findOneBy({id});
+    // creamos una variable del tipo de la Entidad
+    let product: Product;
+
+    // validamos si el término recibido es un uuid
+    if (isUUID(id)) {
+
+      // buscamos el producto por el "id" (uuid) en BD
+      product = await this.productRepository.findOneBy({id: id});
+
+    // si no es uuid, buscamos por "slug" o "title" con QueryBuilder
+    } else {
+      
+      const queryBuilder = this.productRepository.createQueryBuilder();
+      product = await queryBuilder.where('UPPER(title) =:title or slug =:slug', {
+        title: id.toUpperCase(),
+        slug: id.toLowerCase(),
+      }).getOne();
+    }
 
     // si no existe el producto
     if (!product)
@@ -62,8 +86,33 @@ export class ProductsService {
     return product;
   }
 
-  update(id: number, updateProductDto: UpdateProductDto) {
-    return `This action updates a #${id} product`;
+  // método para modificar un Producto por id (sólo por uuid)
+  async update(id: string, updateProductDto: UpdateProductDto) {
+    
+    // buscamos el producto por el id y carga sus propiedades
+    const product = this.productRepository.preload({
+      id: id,
+      ...updateProductDto
+    });
+
+    // si no existe el producto
+    if (!product) 
+      throw new NotFoundException(`Product whit id= "${id}" not found`);
+
+    try {
+     
+      // si existe, guardamos los cambios en BD
+    await this.productRepository.save(await(product));
+
+    // retornamos 
+    return product;
+
+    // manejo de errores
+    } catch (error) {
+      
+      // llamo al método que maneja los errores
+      this.handleExceptions(error);
+    }
   }
 
   // método para eliminar un Producto
